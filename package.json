@@ -1,0 +1,30 @@
+{
+  "name": "jev-plays-pokemon",
+  "version": "0.1.0",
+  "description": "A harness where Jev, TypeSafe's System One model, plays Pokémon Red. Bring your own ROM.",
+  "type": "module",
+  "private": true,
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "start": "tsx src/main.ts",
+    "headless": "tsx src/main.ts --headless",
+    "typecheck": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erikwijnbladh/jev-plays-pokemon.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0",
+    "serverboy": "^0.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
