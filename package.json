@@ -1,15 +1,17 @@
 {
   "name": "jev-plays-pokemon",
   "version": "0.1.0",
-  "description": "A harness where Jev, TypeSafe's System One model, plays Pokémon Red. Bring your own ROM.",
+  "description": "A harness where Jev, TypeSafe's System One model, plays Pok\u00e9mon Red. Bring your own ROM.",
   "type": "module",
   "private": true,
   "license": "GPL-2.0-or-later",
   "scripts": {
     "setup": "tsx scripts/setup.ts",
-    "start": "tsx src/main.ts",
+    "start": "npm run web:build --silent && tsx src/main.ts",
     "headless": "tsx src/main.ts --headless",
-    "typecheck": "tsc"
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts --logLevel warn",
+    "typecheck": "tsc && tsc -p web"
   },
   "repository": {
     "type": "git",
@@ -19,12 +21,22 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/press-start-2p": "^5.3.0",
     "@typesafe-ai/sdk": "^0.6.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "serverboy": "^0.0.7"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^8.3.3"
   }
 }

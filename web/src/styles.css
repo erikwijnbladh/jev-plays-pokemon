@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "@fontsource/press-start-2p/400.css";
+@import "@fontsource/pixelify-sans/400.css";
+@import "@fontsource/pixelify-sans/600.css";
+@import "@fontsource/pixelify-sans/700.css";
+
+/* Colors and type from the Paper design ("Stream Overlay 1920×1080"). */
+@theme {
+  --color-ink: #101010;
+  --color-paper: #edebe6;
+  --color-cream: #f6f4f0;
+  --color-red: #e03c3c;
+  --color-pink: #ff8484;
+  --color-blush: #ffe3e3;
+  --color-maroon: #943a3a;
+  --color-slate: #3a3732;
+  --color-stone: #5a5650;
+  --color-taupe: #9c9486;
+  --color-dust: #c9c4ba;
+  --color-ash: #8a857c;
+  --color-lilac: #b8b4c8;
+  --color-lavender: #d8d4e4;
+  --color-bezel: #2c2a3a;
+  --color-hp-green: #48b848;
+  --color-hp-amber: #e8b800;
+  --color-poison: #8a3fa0;
+
+  --font-pixel: "Press Start 2P", system-ui, sans-serif;
+  --font-sans: "Pixelify Sans", system-ui, sans-serif;
+
+  --shadow-hard: 6px 6px 0 var(--color-ink);
+  --shadow-hard-sm: 4px 4px 0 var(--color-ink);
+  --shadow-hard-red: 6px 6px 0 var(--color-red);
+  --shadow-hard-stone: 6px 6px 0 var(--color-stone);
+
+  --animate-blink: blink 1s steps(2, start) infinite;
+  @keyframes blink {
+    to { visibility: hidden; }
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-ink);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
