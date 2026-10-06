@@ -33,6 +33,7 @@ export class Agent {
   }
 
   async step() {
+    this.ctx.mem.stats.steps++;
     const mode = this.mode();
     this.track(mode);
     switch (mode) {
@@ -97,7 +98,10 @@ export class Agent {
   load(name: string) {
     this.ctx.emu.loadState(`${this.saveDir}/${name}.state.json`);
     const memFile = `${this.saveDir}/${name}.memory.json`;
-    if (fs.existsSync(memFile)) Object.assign(this.ctx.mem, JSON.parse(fs.readFileSync(memFile, 'utf8')) as Memory, { tried: {}, talkingTo: null });
+    if (fs.existsSync(memFile)) {
+      const saved = JSON.parse(fs.readFileSync(memFile, 'utf8')) as Memory;
+      Object.assign(this.ctx.mem, saved, { tried: {}, talkingTo: null, stats: { ...this.ctx.mem.stats, ...saved.stats } });
+    }
     this.lastMap = -1;
     this.ctx.log('save', `loaded ${name}`);
   }

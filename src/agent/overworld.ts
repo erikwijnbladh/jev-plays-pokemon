@@ -195,7 +195,13 @@ async function decideFocus(ctx: Ctx): Promise<Focus> {
   if (party.length && balls > 0) options.catch = { focus: FOCI.catch, facts: [`${balls} Poké Ball(s) in the bag`, `team has ${party.length} of 6 Pokémon`] };
   options.explore = { focus: FOCI.explore };
   const state = { ...basics(ctx), ...teamSummary(ctx), bag: gs.bag().map((i) => `${i.name} x${i.qty}`) };
-  const res = await ctx.jev.choose('focus', state, "You are playing Pokémon Red. Given the objective and the team's health and levels, what should the player focus on right now?", options);
+  const res = await ctx.jev.choose('focus', state, "You are playing Pokémon Red. Given the objective and the team's health and levels, what should the player focus on right now?", options, {
+    kind: 'focus',
+    title: 'What should Jev focus on?',
+    subtitle: objective(ctx).m?.title,
+    labels: Object.fromEntries((Object.keys(options) as Focus[]).map((k) => [k, { label: k.toUpperCase(), sub: FOCI[k] }])),
+    logPrefix: 'Focus: ',
+  });
   ctx.mem.focus = { value: res.choice, key: sig, age: 0 };
   ctx.log('decision', `focus → ${res.choice}`, { confidence: res.confidence });
   return res.choice;
@@ -331,6 +337,12 @@ export async function overworldStep(ctx: Ctx, agent: { exploring: boolean; onDec
     'overworld', state,
     'You are playing Pokémon Red. Which action best serves `currentFocus` and the objective? Prefer something new over repeating an action that was already chosen without progress.',
     criteria,
+    {
+      kind: 'overworld',
+      title: 'Where to next?',
+      subtitle: `${prettyMap(ctx.gs.mapName)} · focus: ${focus}`,
+      labels: Object.fromEntries(cands.map((c) => [c.key, { label: c.criteria.action, sub: c.criteria.facts.slice(0, 2).join(' · ') }])),
+    },
   );
   let pick = res.choice;
   // loop breaking: the same option chosen 3+ times without progress → sample from the rest of Jev's distribution;
@@ -338,9 +350,11 @@ export async function overworldStep(ctx: Ctx, agent: { exploring: boolean; onDec
   const triedKey = (k: string) => `${ctx.gs.mapName}:${k}`;
   if ((ctx.mem.tried[triedKey(pick)] ?? 0) >= 3 && cands.length > 1) {
     pick = sample(res.probabilities, 0.3, [pick]);
+    ctx.jev.override(pick);
     ctx.log('info', `"${res.choice}" already tried ${ctx.mem.tried[triedKey(res.choice)]}x without progress → trying "${pick}"`);
   } else if (agent.exploring) {
     pick = sample(res.probabilities, 0.3);
+    if (pick !== res.choice) ctx.jev.override(pick);
     if (pick !== res.choice) ctx.log('info', `no progress for a while → sampled "${pick}" instead of "${res.choice}"`);
   }
   const c = cands.find((k) => k.key === pick)!;

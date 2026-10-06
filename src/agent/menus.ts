@@ -1,6 +1,6 @@
 import type { Ctx } from './ctx.js';
 import { tap, basics, monLine } from './ctx.js';
-import { sym } from '../game/data.js';
+import { sym, prettyMap } from '../game/data.js';
 import { sample } from '../jev/client.js';
 import type { EntryType } from '@typesafe-ai/sdk';
 
@@ -188,13 +188,22 @@ export async function decideMenu(ctx: Ctx, purpose: string, mc: MenuContext = {}
   }
   const id = `${[...byKey.keys()].join('|')}#${prompt.join(' ').slice(-120)}`;
   const state = { ...basics(ctx), team: ctx.gs.party().map(monLine), ...mc.state, recentDialog: prompt };
-  const res = await ctx.jev.choose(purpose, state, 'You are playing Pokémon Red. A menu is open after `recentDialog`. Which option should the player pick?', criteria);
+  const question = (prompt[prompt.length - 1] ?? '').replace(/\s+/g, ' ').trim();
+  const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+  const res = await ctx.jev.choose(purpose, state, 'You are playing Pokémon Red. A menu is open after `recentDialog`. Which option should the player pick?', criteria, {
+    kind: purpose.startsWith('battle') ? 'battle' : 'menu',
+    title: question ? clip(question, 60) : 'Pick an option',
+    subtitle: prettyMap(ctx.gs.mapName),
+    labels: Object.fromEntries([...byKey].map(([k, o]) => [k, { label: o.text, sub: facts(o.text) ? clip(facts(o.text), 70) : undefined }])),
+    logPrefix: question ? `"${clip(question, 22)}" → ` : '',
+  });
   let pick = res.choice;
   // the same answer to the same menu again and again: something isn't working, try another option
   const h = menuHistory.get(id);
   const streak = h?.choice === pick ? h.streak + 1 : 1;
   if (streak >= 4 && byKey.size > 1) {
     pick = sample(res.probabilities, 0.5, [pick]);
+    ctx.jev.override(pick);
     ctx.log('info', `menu answered "${h!.choice}" ${streak - 1}x in a row → trying "${pick}"`);
   }
   menuHistory.set(id, { choice: pick, streak: pick === h?.choice ? streak : 1 });

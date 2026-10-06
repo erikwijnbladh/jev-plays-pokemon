@@ -58,6 +58,7 @@ async function chooseNickname(ctx: Ctx) {
     { pokemon: { species: species || 'the new Pokémon', types: sp?.types ?? [] } },
     'Which of these made-up nicknames suits `pokemon` best?',
     options,
+    { kind: 'nickname', title: `Name the new ${species || 'Pokémon'}`, subtitle: sp?.types.join('/'), labels: Object.fromEntries(names.map((n) => [`name_${n}`, { label: n }])), logPrefix: `${species} → ` },
   );
   const name = choice.slice('name_'.length);
   ctx.log('decision', `nickname for ${species}: ${name}`);

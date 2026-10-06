@@ -25,10 +25,12 @@ export interface Memory {
   talkingTo: string | null;
   /** whole-team losses per place */
   losses: Record<string, number>;
+  /** totals across sessions (saved with the game): Jev calls, input tokens, summed latency, agent steps */
+  stats: { calls: number; inputTokens: number; latencyMs: number; steps: number };
 }
 
 export function newMemory(): Memory {
-  return { visited: [], talked: {}, said: {}, dialog: [], actions: [], focus: null, tried: {}, talkingTo: null, losses: {} };
+  return { visited: [], talked: {}, said: {}, dialog: [], actions: [], focus: null, tried: {}, talkingTo: null, losses: {}, stats: { calls: 0, inputTokens: 0, latencyMs: 0, steps: 0 } };
 }
 
 export interface Ctx {

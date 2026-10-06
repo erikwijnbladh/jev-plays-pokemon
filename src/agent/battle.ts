@@ -81,7 +81,12 @@ function statusMoveFacts(ctx: Ctx, effect: number, enemyStatus: string): string[
   return ['status move, does no damage'];
 }
 
-interface Option { criteria: EntryType; run: () => Promise<void> }
+/** criteria = what Jev reads; label/sub = what the overlay shows */
+interface Option { criteria: EntryType; label: string; sub?: string; run: () => Promise<void> }
+
+const shortEff = (m: number) => (m === 0 ? 'no effect' : m >= 4 ? 'super effective 4×' : m >= 2 ? 'super effective' : m < 1 ? 'not very effective' : 'normal damage');
+const shortDmg = (d: string) => ({ 'certainly knocks it out': 'certain KO', 'likely knocks it out': 'likely a KO', 'takes about half or more of its remaining HP': 'big damage', 'moderate damage': 'moderate damage', 'small damage': 'small damage', 'no damage': 'no damage' })[d] ?? d;
+const pct = (hp: number, max: number) => `${Math.round((100 * hp) / Math.max(1, max))}%`;
 
 async function useMove(ctx: Ctx, name: string) {
   if (!(await select(ctx, 'FIGHT'))) return;
@@ -122,6 +127,7 @@ async function decideTurn(ctx: Ctx) {
     if (mv.pp === 0) return; // unusable
     const eff = rom.effectiveness(mv.type, foe.types);
     const facts: string[] = [`${mv.type} move`];
+    let sub: string;
     if (mv.power > 0 || fixedDamage(mv.name, me.level, foe.hp) !== undefined) {
       const fixed = fixedDamage(mv.name, me.level, foe.hp);
       const phys = PHYSICAL_TYPES.has(mv.type);
@@ -130,12 +136,17 @@ async function decideTurn(ctx: Ctx) {
         : damageRange(me.level, mv.power, phys ? me.stats.atk : me.stats.spc, phys ? foe.stats.def : foe.stats.spc, me.types.includes(mv.type), eff);
       facts.push(effectivenessWord(eff) + ` against ${foe.types.join('/')}`);
       const dmg = damageWord(lo, hi, foe.hp);
+      sub = eff === 0 ? 'no effect' : `${shortEff(eff)} · ${shortDmg(dmg)}`;
       facts.push(catching && /knocks it out/.test(dmg) ? `${dmg}, and a knocked-out Pokémon can't be caught` : dmg);
       if (mv.accuracy < 90) facts.push(mv.accuracy < 70 ? 'often misses' : 'sometimes misses');
-    } else facts.push(...statusMoveFacts(ctx, rom.movesByName.get(mv.name)?.effect ?? 0, foe.status));
+    } else {
+      const f = statusMoveFacts(ctx, rom.movesByName.get(mv.name)?.effect ?? 0, foe.status);
+      facts.push(...f);
+      sub = /no effect/.test(f[1] ?? '') ? `${f[0]} · no effect now` : `${f[0]} · no damage`;
+    }
     if (mv.pp <= 3) facts.push(`only ${mv.pp} PP left`);
     if (cantAct) facts.push(cantAct);
-    options[key] = { criteria: { action: `Use ${mv.name}`, facts }, run: () => useMove(ctx, mv.name) };
+    options[key] = { criteria: { action: `Use ${mv.name}`, facts }, label: mv.name, sub, run: () => useMove(ctx, mv.name) };
   });
 
   for (const p of party) {
@@ -153,6 +164,8 @@ async function decideTurn(ctx: Ctx) {
           'switching uses this turn',
         ],
       },
+      label: `SWITCH → ${p.nickname}`,
+      sub: `${best < 0 ? 'no damaging moves' : `best move ${shortEff(best)}`} · ${levelGap(p.level, foe.level)}`,
       run: async () => {
         if (!(await select(ctx, 'PKMN'))) return;
         await pickPartySlot(ctx, p.slot);
@@ -167,12 +180,16 @@ async function decideTurn(ctx: Ctx) {
       const amount = heal >= me.maxHp - me.hp ? 'back to full HP' : heal >= (me.maxHp - me.hp) / 2 ? 'a good part of its missing HP' : 'a little HP';
       options[`item_${it.name}`] = {
         criteria: { action: `Use ${it.name} on your active Pokémon`, facts: [`heals ${amount}`, `your Pokémon has ${hpWord(me.hp, me.maxHp)}`, `${it.qty} left`, 'uses this turn'] },
+        label: `USE ${it.name}`,
+        sub: `${me.species} at ${pct(me.hp, me.maxHp)} · heals ${amount}`,
         run: async () => { if (await openBagAt(ctx, it.name)) await pickPartySlot(ctx, me.slot); },
       };
     }
     if (CURES[it.name]?.includes(me.status)) {
       options[`item_${it.name}`] = {
         criteria: { action: `Use ${it.name}`, facts: [`cures your Pokémon's ${me.status.toLowerCase()} status`, `${it.qty} left`, 'uses this turn'] },
+        label: `USE ${it.name}`,
+        sub: `cures ${me.status.toLowerCase()}`,
         run: async () => { if (await openBagAt(ctx, it.name)) await pickPartySlot(ctx, me.slot); },
       };
     }
@@ -190,6 +207,8 @@ async function decideTurn(ctx: Ctx) {
             `${it.qty} left`,
           ],
         },
+        label: `THROW ${it.name}`,
+        sub: `${catchWord(catchChance(it.name, foe)).replace(' to catch it', '')} · ${owned ? 'already owned' : 'new species'}`,
         run: () => openBagAt(ctx, it.name).then(() => undefined),
       };
     }
@@ -198,13 +217,15 @@ async function decideTurn(ctx: Ctx) {
   if (b.kind === 'wild') {
     options.run = {
       criteria: { action: 'Run away', facts: [me.stats.spd >= foe.stats.spd ? 'escape is certain (you are faster)' : 'escape may fail (you are slower)', 'no experience gained'] },
+      label: 'RUN',
+      sub: me.stats.spd >= foe.stats.spd ? 'escape certain · no experience' : 'may fail · no experience',
       run: async () => { await select(ctx, 'RUN'); },
     };
   }
 
   // stuck with nothing usable (all PP gone): the game falls back to STRUGGLE through FIGHT
   if (!Object.keys(options).length) {
-    options.struggle = { criteria: { action: 'Fight (no PP left: STRUGGLE)' }, run: async () => { await select(ctx, 'FIGHT'); await confirm(ctx); } };
+    options.struggle = { criteria: { action: 'Fight (no PP left: STRUGGLE)' }, label: 'STRUGGLE', run: async () => { await select(ctx, 'FIGHT'); await confirm(ctx); } };
   }
 
   const state = {
@@ -219,7 +240,14 @@ async function decideTurn(ctx: Ctx) {
   };
   const keys = Object.keys(options);
   const criteria = Object.fromEntries(keys.map((k) => [k, options[k].criteria]));
-  const res = await ctx.jev.choose('battle', state, 'You are in a Pokémon Red battle. Which action best serves `playerGoal` this turn?', criteria);
+  const nick = party[me.slot]?.nickname ?? me.species;
+  const res = await ctx.jev.choose('battle', state, 'You are in a Pokémon Red battle. Which action best serves `playerGoal` this turn?', criteria, {
+    kind: 'battle',
+    title: `What should ${nick} do?`,
+    subtitle: `vs ${b.kind === 'wild' ? 'wild' : "the trainer's"} ${foe.species} · Lv ${foe.level} · ${pct(foe.hp, foe.maxHp)} HP`,
+    labels: Object.fromEntries(keys.map((k) => [k, { label: options[k].label, sub: options[k].sub }])),
+    logPrefix: `${nick} → `,
+  });
   const what = (options[res.choice].criteria as { action: string }).action;
   remember(ctx.mem.actions, `battle vs ${foe.species}: ${what}`, 12);
   ctx.log('decision', `battle vs ${foe.species} Lv${foe.level}: ${what}`, { confidence: res.confidence });

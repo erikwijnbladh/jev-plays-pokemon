@@ -13,8 +13,32 @@ export interface CallRecord {
   state: StateInput; questions: Questions; answers: SystemOneResult<Questions>['answers']; inputTokens: number;
 }
 
+/** What the overlay shows for a decision. Never sent to Jev. */
+export interface Display<K extends string = string> {
+  kind: 'battle' | 'menu' | 'overworld' | 'focus' | 'nickname';
+  /** the question, e.g. "What should BLOOPA do?" */
+  title: string;
+  subtitle?: string;
+  /** short label + one-line summary per option (falls back to the option key) */
+  labels?: Partial<Record<K, { label: string; sub?: string }>>;
+  /** log line prefix, e.g. "BLOOPA → " */
+  logPrefix?: string;
+}
+
+export interface DecisionEvent {
+  display: Display;
+  keys: string[];
+  /** set once Jev answered */
+  probabilities?: Record<string, number>;
+  choice?: string;
+  model?: string;
+  latencyMs?: number;
+  inputTokens?: number;
+  cached?: boolean;
+}
+
 /** Jev 1.13 input price, USD per million tokens (output is free). */
-const USD_PER_MTOK = 0.042;
+export const USD_PER_MTOK = 0.042;
 
 /**
  * Throttled, cached, logged access to Jev.
@@ -29,6 +53,11 @@ export class Jev {
   inputTokens = 0;
   latencyMs: number[] = [];
   onCall?: (r: CallRecord) => void;
+  /** a Choice with a Display started (no answer yet), and when it was answered */
+  onDecisionStart?: (e: DecisionEvent) => void;
+  onDecision?: (e: DecisionEvent) => void;
+  /** the harness executed a different option than Jev's top pick (loop breaking) */
+  onOverride?: (key: string) => void;
   private last = 0;
   private window: number[] = [];
   private cache = new Map<string, SystemOneResult<Questions>>();
@@ -81,16 +110,33 @@ export class Jev {
    * Returns Jev's pick and the full distribution (callers use it for loop breaking).
    */
   async choose<K extends string>(
-    purpose: string, state: StateInput, instructions: EntryType, options: Partial<Record<K, EntryType>>,
+    purpose: string, state: StateInput, instructions: EntryType, options: Partial<Record<K, EntryType>>, display?: Display<K>,
   ): Promise<{ choice: K; probabilities: Record<K, number>; confidence: number }> {
     const keys = Object.keys(options) as K[];
     if (keys.length === 0) throw new Error(`choose(${purpose}) called with no options`);
     if (keys.length === 1) return { choice: keys[0], probabilities: { [keys[0]]: 1 } as Record<K, number>, confidence: 1 };
     const criteria: Record<string, EntryType> = {};
     for (const k of shuffle(keys)) criteria[k] = options[k] ?? null;
-    const res = await this.ask(purpose, state, { decision: choice(instructions, criteria) });
+    const event: DecisionEvent | undefined = display && { display: display as Display, keys };
+    if (event) this.onDecisionStart?.(event);
+    const t0 = Date.now();
+    let call: CallRecord | undefined;
+    const prev = this.onCall;
+    this.onCall = (r) => { call = r; prev?.(r); };
+    let res;
+    try { res = await this.ask(purpose, state, { decision: choice(instructions, criteria) }); }
+    finally { this.onCall = prev; }
     const a = res.answers.decision as ChoiceResponse;
+    if (event) {
+      Object.assign(event, { probabilities: a.probabilities, choice: a.choice, model: res.model, latencyMs: Date.now() - t0, inputTokens: call?.inputTokens ?? 0, cached: call?.cached });
+      this.onDecision?.(event);
+    }
     return { choice: a.choice as K, probabilities: a.probabilities as Record<K, number>, confidence: a.confidence };
+  }
+
+  /** Report that the harness executed `key` instead of Jev's top pick. */
+  override(key: string) {
+    this.onOverride?.(key);
   }
 
   private async callWithRetry(req: { state: EntryType; questions: Questions }) {
